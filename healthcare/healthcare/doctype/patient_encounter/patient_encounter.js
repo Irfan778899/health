@@ -22,6 +22,8 @@ frappe.ui.form.on('Patient Encounter', {
 						}
 				})
 		}
+		show_clinical_notes(frm);
+		show_orders(frm);
 	},
 
 	setup: function(frm) {
@@ -91,6 +93,17 @@ frappe.ui.form.on('Patient Encounter', {
 			frm.add_custom_button(__('Clinical Procedure'), function() {
 				create_procedure(frm);
 			},__('Create'));
+
+			frm.add_custom_button(__("Clinical Note"), function() {
+				frappe.route_options = {
+					"patient": frm.doc.patient,
+					"reference_doc": "Patient Encounter",
+					"reference_name": frm.doc.name,
+					"practitioner": frm.doc.practitioner
+				}
+				frappe.new_doc("Clinical Note");
+			},__('Create'));
+
 
 			if (frm.doc.drug_prescription && frm.doc.inpatient_record && frm.doc.inpatient_status === "Admitted") {
 				frm.add_custom_button(__('Inpatient Medication Order'), function() {
@@ -230,8 +243,9 @@ frappe.ui.form.on('Patient Encounter', {
 		}
 	},
 
-	set_patient_info: function(frm) {
+	set_patient_info: async function(frm) {
 		if (frm.doc.patient) {
+			let me = frm
 			frappe.call({
 				method: 'healthcare.healthcare.doctype.patient.patient.get_patient_detail',
 				args: {
@@ -249,7 +263,12 @@ frappe.ui.form.on('Patient Encounter', {
 						'inpatient_record': data.message.inpatient_record,
 						'inpatient_status': data.message.inpatient_status
 					};
-					frm.set_value(values);
+
+					frappe.run_serially([
+						()=>frm.set_value(values),
+						()=>show_clinical_notes(frm),
+						()=>show_orders(frm),
+					]);
 				}
 			});
 		} else {
@@ -640,4 +659,26 @@ var apply_code_sm_filter_to_child = function(frm, field, table_list, code_system
 			};
 		});
 	});
+};
+
+var show_clinical_notes = async function(frm) {
+	if (frm.doc.docstatus == 0 && frm.doc.patient) {
+		const clinical_notes = new healthcare.ClinicalNotes({
+			frm: frm,
+			notes_wrapper: $(frm.fields_dict.clinical_notes.wrapper),
+		});
+		clinical_notes.refresh();
+	}
+}
+
+var show_orders = async function(frm) {
+	if (frm.doc.docstatus == 0 && frm.doc.patient) {
+		const orders = new healthcare.Orders({
+			frm: frm,
+			open_activities_wrapper: $(frm.fields_dict.order_history_html.wrapper),
+			form_wrapper: $(frm.wrapper),
+			create_orders: true,
+		});
+		orders.refresh();
+	}
 }
